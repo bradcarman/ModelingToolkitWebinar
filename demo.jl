@@ -5,8 +5,8 @@ using Plots
 # ------------------------------------------------
 # Part 1: Steady State Modeling ------------------
 # ------------------------------------------------
-vars = @variables p₁=300e5 p₂=0e5 Aₒ=0.001
 pars = @parameters A=0.1 ẋ=1 c=1000 pₛ=300e5 pᵣ=0 ρ=1000 Cₒ=2.7 m=100 ẍ=0
+vars = @variables p₁=300e5 p₂=0e5 Aₒ=0.001
 
 # symbolic expressions
 u = ẋ * (A/Aₒ)
@@ -30,10 +30,12 @@ orifices = []
 velocity_limits = 1.0:0.1:2.0
 for velocity_limit in velocity_limits
     prob′ = remake(prob; p=[ẋ => velocity_limit])
-    sol = solve(prob′)
-    push!(orifices, sol[Aₒ])
+    sol′ = solve(prob′)
+    push!(orifices, sol′[Aₒ])
 end
 plot(velocity_limits, orifices; xlabel="velocity limit [m/s]", ylabel="orifice size [m^2]")
+
+
 
 
 
@@ -75,6 +77,8 @@ plot(sol, idxs=[p₁, p₂]; ylabel="pressure [Pa]")
 # for comparison with compressible system
 prob′ = remake(prob, tspan=(0, 0.1))
 sol_ic = solve(prob′)
+
+
 
 
 # ------------------------------------------------
@@ -291,3 +295,7 @@ plot!(sol_ic, idxs=[ẍ])
 
 # What's Next --> Using the ModelingToolkitStandardLibrary
 # https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/
+# RC Circuit
+# https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/tutorials/rc_circuit/
+# DC Motor
+# https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/tutorials/dc_motor_pi/
