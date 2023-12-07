@@ -263,7 +263,7 @@ prob = ODEProblem(sys, [], (0, 0.1), [])
 # https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/#Initialization-Schemes
 NEWTON = NLNewton(check_div = false, always_new = true, max_iter = 1000, relax = 4 // 10)
 sol = solve(prob, ImplicitEuler(nlsolve = NEWTON); initializealg = NoInit(), dt = 1e-6, adaptive = false)
-sol′ = solve(prob, ImplicitEuler(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
 
 println("NoInit() adaptive=false")
 println("state = given => used")
