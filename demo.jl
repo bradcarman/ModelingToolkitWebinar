@@ -1,0 +1,277 @@
+using ModelingToolkit
+using DifferentialEquations
+using Plots
+
+# steady state problem ---------------------------
+vars = @variables p₁=200e5 p₂=200e5 orifice=0.001
+pars = @parameters area=0.1 ẋ=1 c=1000 pₛ=300e5 pᵣ=0 ρ=1000 Cₒ=2.7 m=100 ẍ=0
+
+# symbolic expressions
+u = ẋ * (area/orifice)
+
+# equations
+eqs = [
+    pₛ - p₁ ~ (1/2)*ρ*u^2*Cₒ
+    p₂ - pᵣ ~ (1/2)*ρ*u^2*Cₒ
+    m*ẍ ~ (p₁-p₂)*area - c*ẋ
+]
+
+@named nlsys = NonlinearSystem(eqs, vars, pars)
+sys = structural_simplify(nlsys)
+prob = NonlinearProblem(sys, [], [])
+sol = solve(prob) #, NewtonRaphson())
+
+sol[orifice]
+
+
+
+
+# dynamic problem ------------------------------
+@parameters t
+D = Differential(t)
+
+vars = @variables x(t)=0 ẋ(t)=0 ẍ(t)=0 p₁(t)=300e5 p₂(t)=0e5
+pars = @parameters area=0.1 pₛ=300e5 pᵣ=0 ρ=1000 C₀=2.7 m=100 orifice=0.00094 c=1000 g=9.807
+
+# symbolic expressions
+u = ẋ * (area/orifice)
+
+# equations
+eqs = [
+    
+    D(x) ~ ẋ
+    D(ẋ) ~ ẍ
+
+    pₛ - p₁ ~ (1/2)*ρ*u^2*C₀
+    p₂ - pᵣ ~ (1/2)*ρ*u^2*C₀
+
+    m*ẍ ~ (p₁-p₂)*area - c*ẋ
+]
+
+@named odesys = ODESystem(eqs, t, vars, pars)
+sys = structural_simplify(odesys)
+prob = ODEProblem(sys, [], (0.0, 0.0002), [])
+sol = solve(prob)
+
+# explain sol object...
+
+plot(sol, idxs=[x])
+plot(sol, idxs=[ẋ])
+plot(sol, idxs=[ẍ])
+plot(sol, idxs=[p₁, p₂])
+
+
+# components -----------------------
+# https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/connectors/connections/
+
+@connector Port begin
+    p(t)
+    ṁ(t)=0, [connect = Flow]
+end
+
+@connector Flange begin
+    ẋ(t)=0
+    f(t), [connect = Flow]
+end
+
+@mtkmodel Orifice begin
+    @parameters begin
+        Cₒ=2.7
+        area=0.00094
+        ρ₀=1000
+        p′=0
+    end
+    @variables begin
+        ṁ(t)=0
+        p₁(t)=p′
+        p₂(t)=p′
+    end
+    @components begin
+        port₁ = Port()
+        port₂ = Port()
+    end
+    begin
+        u = ṁ/(ρ₀*area)
+    end
+    @equations begin
+        ṁ ~ +port₁.ṁ
+        ṁ ~ -port₂.ṁ
+        p₁ ~ port₁.p
+        p₂ ~ port₂.p
+        
+        p₁ - p₂ ~ (1/2)*ρ₀*u^2*Cₒ
+    end
+end
+
+@mtkmodel Volume begin
+    @parameters begin
+        area=0.1
+        ρ₀=1000
+        β=2e9
+        direction=+1
+        p′
+        x′
+    end
+    @variables begin
+        p(t)=p′
+        x(t)=x′
+        ṁ(t)=0
+        f(t)=p′ * area
+        ẋ(t)=0
+        r(t)=ρ₀*(1 + p′/β)
+        ṙ(t)=0
+    end
+    @components begin
+        port = Port()
+        flange = Flange()
+    end
+    @equations begin
+        D(x) ~ ẋ
+        D(r) ~ ṙ
+        
+        p ~ +port.p
+        ṁ ~ +port.ṁ # mass is entering
+        f ~ -flange.f * direction # force is leaving
+        ẋ ~ flange.ẋ * direction
+
+        r ~ ρ₀*(1 + p/β)
+        ṁ ~ (r*ẋ*area) + (ṙ*x*area)
+        f ~ p * area
+    end
+end
+
+@mtkmodel Mass begin
+    @parameters begin
+        m = 100
+        f′
+    end
+    @variables begin
+        f(t)=f′
+        x(t)=0
+        ẋ(t)=0
+        ẍ(t)=f′/m
+    end
+    @components begin
+        flange = Flange()
+    end
+    @equations begin
+        D(x) ~ ẋ
+        D(ẋ) ~ ẍ
+
+        f ~ flange.f
+        ẋ ~ flange.ẋ
+
+        m*ẍ ~ f
+    end
+end
+
+@mtkmodel Source begin
+    @parameters begin
+        p′
+    end
+    @components begin
+        port = Port()
+    end    
+    @equations begin
+        port.p ~ p′
+    end
+end
+
+@mtkmodel Actuator begin
+    @parameters begin
+        p₁′
+        p₂′
+        x′=0.5
+        area=0.1
+    end
+    @components begin
+        port₁ = Port()
+        port₂ = Port()
+        vol₁ = Volume(p′=p₁′, x′=ParentScope(x′),  direction=-1)
+        vol₂ = Volume(p′=p₂′, x′=ParentScope(x′),  direction=+1)
+        mass = Mass(f′=(p₂′ - p₁′)*area)
+        flange = Flange()
+    end
+    @equations begin
+        connect(port₁, vol₁.port)
+        connect(port₂, vol₂.port)
+        connect(vol₁.flange, vol₂.flange, mass.flange, flange)
+    end
+end
+
+
+
+@mtkmodel Damper begin
+    @parameters begin
+        c = 1000000
+    end
+    @components begin
+        flange = Flange()
+    end
+    @equations begin
+        flange.f ~ c*flange.ẋ
+    end
+end
+
+
+@mtkmodel System begin
+    @components begin
+        res₁ = Orifice(p′=300e5)
+        res₂ = Orifice(p′=0)
+        act = Actuator(p₁′=300e5, p₂′=0)
+        src = Source(p′=300e5)
+        snk = Source(p′=0)
+        dmp = Damper()
+    end
+    @equations begin
+        connect(src.port, res₁.port₁)
+        connect(res₁.port₂, act.port₁)
+        connect(act.port₂, res₂.port₁)
+        connect(res₂.port₂, snk.port)
+        connect(dmp.flange, act.flange)
+    end
+end
+
+@mtkbuild sys = System()
+prob = ODEProblem(sys, [], (0, 0.001), [])
+
+# https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/#Initialization-Schemes
+NEWTON = NLNewton(check_div = false, always_new = true, max_iter = 1000, relax = 4 // 10)
+sol = solve(prob, ImplicitEuler(nlsolve = NEWTON); initializealg = NoInit(), dt = 1e-6, adaptive = false)
+sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+
+#sol = solve(prob; abstol=1e-9, reltol=1e-9, initializealg = NoInit(), dt = 1e-6, adaptive = false)
+
+# sol = solve(prob, FBDF(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+# sol = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+
+
+plot(sol, idxs=[sys.act.vol₁.p, sys.act.vol₂.p])
+plot(sol, idxs=[sys.act.vol₁.x, sys.act.vol₂.x])
+plot(sol, idxs=[sys.act.vol₁.r, sys.act.vol₂.r])
+
+plot(sol, idxs=[sys.act.vol₁.ṙ , sys.act.vol₂.ṙ ])
+plot!(sol′, idxs=[sys.act.vol₁.ṙ , sys.act.vol₂.ṙ ])
+
+plot(sol, idxs=[sys.act.vol₁.ṁ , sys.act.vol₂.ṁ ])
+
+plot(sol, idxs=[sys.act.mass.ẋ])
+
+plot(sol, idxs=[sys.act.mass.ẍ])
+plot!(sol′, idxs=[sys.act.mass.ẍ])
+
+plot(sol, idxs=[sys.res₁.ṁ])
+plot(sol, idxs=[sys.res₂.ṁ])
+
+for (s, u0, st) in zip(sol[1], prob.u0, states(sys))
+    println("$st = $u0 => $s")
+end
+
+for (s, u0, st) in zip(sol′[1], prob.u0, states(sys))
+    println("$st = $u0 => $s")
+end
+
+
+
+
+
