@@ -265,32 +265,9 @@ NEWTON = NLNewton(check_div = false, always_new = true, max_iter = 1000, relax =
 sol = solve(prob, ImplicitEuler(nlsolve = NEWTON); initializealg = NoInit(), dt = 1e-6, adaptive = false)
 sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
 
-println("NoInit() adaptive=false")
-println("state = given => used")
-for (s, u0, st) in zip(sol[1], prob.u0, states(sys))
-    println("$st = $u0 => $s")
-end
-
-println("ShampineCollocationInit() adaptive=true")
-println("state = given => used")
-for (s, u0, st) in zip(sol′[1], prob.u0, states(sys))
-    println("$st = $u0 => $s")
-end
-
-
-plot(sol, idxs=[sys.act.vol₁.p, sys.act.vol₂.p])
-plot(sol, idxs=[sys.act.vol₁.x, sys.act.vol₂.x])
-
-plot(sol, idxs=[sys.act.vol₁.ṁ , sys.act.vol₂.ṁ ])
-
-plot(sol, idxs=[sys.act.mass.x])
-plot!(sol_ic, idxs=[x])
-
-plot(sol, idxs=[sys.act.mass.ẋ])
+# velocity comparison (incompressible vs. compressible)
+plot(sol, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]")
 plot!(sol_ic, idxs=[ẋ])
-
-plot(sol, idxs=[sys.act.mass.ẍ])
-plot!(sol_ic, idxs=[ẍ])
 
 
 # What's Next --> Using the ModelingToolkitStandardLibrary
