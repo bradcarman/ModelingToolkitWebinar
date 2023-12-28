@@ -89,11 +89,11 @@ sol_ic = solve(prob′)
 # https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/connectors/connections/
 @connector Port begin
     p(t)
-    ṁ(t)=0, [connect = Flow]
+    dm(t)=0, [connect = Flow]
 end
 
 @connector Flange begin
-    ẋ(t)=0
+    dx(t)=0
     f(t), [connect = Flow]
 end
 
@@ -107,7 +107,7 @@ end
         p′=0
     end
     @variables begin
-        ṁ(t)=0
+        dm(t)=0
         p₁(t)=p′
         p₂(t)=p′
     end
@@ -116,11 +116,11 @@ end
         port₂ = Port(p=p′)
     end
     begin
-        u = ṁ/(ρ₀*Aₒ)
+        u = dm/(ρ₀*Aₒ)
     end
     @equations begin
-        ṁ ~ +port₁.ṁ
-        ṁ ~ -port₂.ṁ
+        dm ~ +port₁.dm
+        dm ~ -port₂.dm
         p₁ ~ port₁.p
         p₂ ~ port₂.p
         
@@ -140,27 +140,27 @@ end
     @variables begin
         p(t)=p′
         x(t)=x′
-        ṁ(t)=0
+        dm(t)=0
         f(t)=p′ * A
-        ẋ(t)=0
-        r(t)=ρ₀*(1 + p′/β)
-        ṙ(t)=0
+        dx(t)=0
+        (r(t) = dr ~ 0), [guess = 1000]
+        dr(t)
     end
     @components begin
         port = Port(p=p′)
         flange = Flange(f=-p′ * A * direction)
     end
     @equations begin
-        D(x) ~ ẋ
-        D(r) ~ ṙ
+        D(x) ~ dx
+        D(r) ~ dr
         
         p ~ +port.p
-        ṁ ~ +port.ṁ # mass is entering
+        dm ~ +port.dm # mass is entering
         f ~ -flange.f * direction # force is leaving
-        ẋ ~ flange.ẋ * direction
+        dx ~ flange.dx * direction
 
         r ~ ρ₀*(1 + p/β)
-        ṁ ~ (r*ẋ*A) + (ṙ*x*A)
+        dm ~ (r*dx*A) + (dr*x*A)
         f ~ p * A
     end
 end
@@ -173,18 +173,18 @@ end
     @variables begin
         f(t)=f′
         x(t)=0
-        ẋ(t)=0
+        dx(t)=0
         ẍ(t)=f′/m
     end
     @components begin
         flange = Flange(f=f′)
     end
     @equations begin
-        D(x) ~ ẋ
-        D(ẋ) ~ ẍ
+        D(x) ~ dx
+        D(dx) ~ ẍ
 
         f ~ flange.f
-        ẋ ~ flange.ẋ
+        dx ~ flange.dx
 
         m*ẍ ~ f
     end
@@ -234,7 +234,7 @@ end
         flange = Flange(f=0)
     end
     @equations begin
-        flange.f ~ c*flange.ẋ
+        flange.f ~ c*flange.dx
     end
 end
 
@@ -257,15 +257,124 @@ end
     end
 end
 
+# @mtkbuild sys = System()
+# prob = ODEProblem(sys, [sys.act.vol₁.r], (0,0.1))
+
+
+@named odesys = System()
+sys = structural_simplify(odesys)
+sys_init = initializesystem(sys)
+
+
+#=
+function check_eqs(sys::ODESystem, ieq::Int)
+
+    varmap = ModelingToolkit.defaults(sys)
+    varmap = Dict(Symbolics.diff2term(ModelingToolkit.value(k)) => ModelingToolkit.value(varmap[k]) for k in keys(varmap))
+    eqs = full_equations(sys)
+
+    eq = eqs[ieq].rhs
+    
+    eq = ModelingToolkit.fixpoint_sub(eq, varmap)
+    
+    return eq
+end
+
+
+sub1 = varmap[sys.act.vol₁.r]
+sub2 = varmap[sys.act.vol₁.p′]
+
+sub1 = (varmap[sys.act.vol₁.ρ₀]*(1 + varmap[sys.act.p₁′]/varmap[sys.act.vol₁.β]))
+
+-varmap[sys.src.p′] + (-varmap[sys.act.vol₁.β]*(varmap[sys.act.vol₁.ρ₀] - sub1)) / act₊vol₁₊ρ₀ + 0.5res₁₊Cₒ*res₁₊ρ₀*((res₁₊dm(t) / (res₁₊Aₒ*res₁₊ρ₀))^2)
+
+eq = eqs[7].rhs
+
+defs = ModelingToolkit.defaults(sys);
+ModelingToolkit.fixpoint_sub(eq.arguments[1], defs)
+ModelingToolkit.fixpoint_sub(eq.arguments[2], defs)
+ModelingToolkit.fixpoint_sub(eq.arguments[3], defs)
+
 @mtkbuild sys = System()
+
+check_eqs(sys, 7)
+
+
+unicodes = [
+    "₊" => "_"
+    "₁" => "1"
+    "₂" => "2"
+    "′" => "_p"
+    "ₒ" => "o"
+    "₀" => "0"
+    "ρ" => "rho"
+    "β" => "B"
+]
+
+
+function modelica_equations(sys::ODESystem)
+
+    reps = [
+        "Differential(t)" => "der"
+        "~" => "="
+        "(t)" => ""
+    ]
+
+    push!(reps, unicodes...)
+
+    mo_eqs = String[]
+    for eq in full_equations(sys)
+        push!(mo_eqs, replace(string(eq), reps...) * ";")
+    end
+
+    return mo_eqs
+end
+
+function modelica_parameters(sys::ODESystem, prob::ODEProblem)
+
+    
+    mo_pars = String[]
+    for (p,v) in zip(parameters(sys), prob.p)
+        st = replace(string(p),unicodes...)
+        push!(mo_pars, "parameter Real $st = $v;")
+    end
+
+    return mo_pars
+end
+
+function modelica_states(sys::ODESystem, prob::ODEProblem)
+
+    reps = ["(t)"=>""]
+    push!(reps, unicodes...)
+    
+    mo_sts = String[]
+    for (p,v) in zip(states(sys), prob.u0)
+        st = replace(string(p),reps...)
+        push!(mo_sts, "Real $st(start = $v);")
+    end
+
+    return mo_sts
+end
+
+mo_eqs = modelica_equations(sys)
+foreach(println, mo_eqs)
+
+mo_pars = modelica_parameters(sys, prob)
+foreach(println, mo_pars)
+
+mo_sts = modelica_states(sys, prob)
+foreach(println, mo_sts)
+
 prob = ODEProblem(sys, [], (0, 0.1), [])
+=#
 
 # https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/#Initialization-Schemes
 sol = solve(prob, ImplicitEuler(nlsolve = NLNewton(check_div=false, always_new=true)))
+sol = solve(prob, Rodas4(); reltol=1e-1, abstol=1e-1)
 # sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
 
 # velocity comparison (incompressible vs. compressible)
-plot(sol, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]")
+plot(sol, idxs=[sys.act.mass.dx]; ylabel="velocity [m/s]")
 plot!(sol_ic, idxs=[ẋ])
 
 
