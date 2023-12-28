@@ -112,8 +112,8 @@ end
         p₂(t)=p′
     end
     @components begin
-        port₁ = Port()
-        port₂ = Port()
+        port₁ = Port(p=p′)
+        port₂ = Port(p=p′)
     end
     begin
         u = ṁ/(ρ₀*Aₒ)
@@ -147,8 +147,8 @@ end
         ṙ(t)=0
     end
     @components begin
-        port = Port()
-        flange = Flange()
+        port = Port(p=p′)
+        flange = Flange(f=-p′ * A * direction)
     end
     @equations begin
         D(x) ~ ẋ
@@ -177,7 +177,7 @@ end
         ẍ(t)=f′/m
     end
     @components begin
-        flange = Flange()
+        flange = Flange(f=f′)
     end
     @equations begin
         D(x) ~ ẋ
@@ -200,12 +200,12 @@ end
         A=0.1
     end
     @components begin
-        port₁ = Port()
-        port₂ = Port()
+        port₁ = Port(p=p₁′)
+        port₂ = Port(p=p₂′)
         vol₁ = Volume(p′=p₁′, x′=x′,  direction=-1)
         vol₂ = Volume(p′=p₂′, x′=x′,  direction=+1)
         mass = Mass(f′=(p₂′ - p₁′)*A)
-        flange = Flange()
+        flange = Flange(f=0)
     end
     @equations begin
         connect(port₁, vol₁.port)
@@ -219,7 +219,7 @@ end
         p′
     end
     @components begin
-        port = Port()
+        port = Port(p=p′)
     end    
     @equations begin
         port.p ~ p′
@@ -231,7 +231,7 @@ end
         c = 1000
     end
     @components begin
-        flange = Flange()
+        flange = Flange(f=0)
     end
     @equations begin
         flange.f ~ c*flange.ẋ
@@ -261,9 +261,8 @@ end
 prob = ODEProblem(sys, [], (0, 0.1), [])
 
 # https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/#Initialization-Schemes
-NEWTON = NLNewton(check_div = false, always_new = true, max_iter = 1000, relax = 4 // 10)
-sol = solve(prob, ImplicitEuler(nlsolve = NEWTON); initializealg = NoInit(), dt = 1e-6, adaptive = false)
-sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+sol = solve(prob, ImplicitEuler(nlsolve = NLNewton(check_div=false, always_new=true)))
+# sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
 
 # velocity comparison (incompressible vs. compressible)
 plot(sol, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]")
