@@ -2,98 +2,19 @@ using ModelingToolkit
 using DifferentialEquations
 using Plots
 
-# ------------------------------------------------
-# Part 1: Steady State Modeling ------------------
-# ------------------------------------------------
-pars = @parameters A=0.1 ẋ=1 c=1000 pₛ=300e5 pᵣ=0 ρ=1000 Cₒ=2.7 m=100 ẍ=0
-vars = @variables p₁=300e5 p₂=0e5 Aₒ=0.001
-
-# symbolic expressions
-u = ẋ * (A/Aₒ)
-
-# equations
-eqs = [
-    pₛ - p₁ ~ (1/2)*ρ*u^2*Cₒ
-    p₂ - pᵣ ~ (1/2)*ρ*u^2*Cₒ
-    m*ẍ ~ (p₂ - p₁)*A - c*ẋ
-]
-
-@named nlsys = NonlinearSystem(eqs, vars, pars)
-sys = structural_simplify(nlsys)
-prob = NonlinearProblem(sys, [], []) # [initial conditions], [parameters] 
-sol = solve(prob)
-
-sol[Aₒ] #<-- solution!
-
-# how to quickly make a new solution 
-orifices = []
-velocity_limits = 1.0:0.1:2.0
-for velocity_limit in velocity_limits
-    prob′ = remake(prob; p=[ẋ => velocity_limit])
-    sol′ = solve(prob′)
-    push!(orifices, sol′[Aₒ])
-end
-plot(velocity_limits, orifices; xlabel="velocity limit [m/s]", ylabel="orifice size [m^2]")
-
-
-
-
-
-# ------------------------------------------------
-# Part 2: Dynamic Modeling (DAEs) ----------------
-# ------------------------------------------------
 @parameters t
 D = Differential(t)
 
-pars = @parameters A=0.1 pₛ=300e5 pᵣ=0 ρ=1000 C₀=2.7 m=100 Aₒ=0.00094 c=1000
-vars = @variables x(t)=0 ẋ(t)=0 p₁(t)=300e5 p₂(t)=0e5 ẍ(t)=(p₂-p₁)*A
-
-# symbolic expressions
-u = ẋ * (A/Aₒ)
-
-# equations
-eqs = [
-    D(x) ~ ẋ
-    D(ẋ) ~ ẍ
-
-    pₛ - p₁ ~ (1/2)*ρ*u^2*C₀
-    p₂ - pᵣ ~ (1/2)*ρ*u^2*C₀
-
-    m*ẍ ~ (p₂-p₁)*A - c*ẋ
-]
-
-@named odesys = ODESystem(eqs, t, vars, pars)
-sys = structural_simplify(odesys)
-prob = ODEProblem(sys, [], (0.0, 0.0001), [])
-sol = solve(prob)
-
-# explain sol object...
-plot(sol.t, sol[x]; marker=:circle, ylabel="position [m]")
-plot(sol, idxs=[x]; ylabel="position [m]")
-plot(sol, idxs=[ẋ]; ylabel="velocity [m/s]")
-plot(sol, idxs=[ẍ]; ylabel="acceleration [m/s^2]")
-plot(sol, idxs=[p₁, p₂]; ylabel="pressure [Pa]")
-
-# for comparison with compressible system
-prob′ = remake(prob, tspan=(0, 0.1))
-sol_ic = solve(prob′)
-
-
-
-
-# ------------------------------------------------
-# Part 3: Component Based Modeling ---------------
-# ------------------------------------------------
 
 # Connectors ----
 # https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/connectors/connections/
 @connector Port begin
     p(t)
-    dm(t)=0, [connect = Flow]
+    dm(t), [connect = Flow]
 end
 
 @connector Flange begin
-    dx(t)=0
+    dx(t)
     f(t), [connect = Flow]
 end
 
@@ -104,16 +25,15 @@ end
         Cₒ=2.7
         Aₒ=0.00094
         ρ₀=1000
-        p′=0
     end
     @variables begin
         dm(t)=0
-        p₁(t)=p′
-        p₂(t)=p′
+        p₁(t)
+        p₂(t)
     end
     @components begin
-        port₁ = Port(p=p′)
-        port₂ = Port(p=p′)
+        port₁ = Port()
+        port₂ = Port()
     end
     begin
         u = dm/(ρ₀*Aₒ)
@@ -134,21 +54,19 @@ end
         ρ₀=1000
         β=2e9
         direction=+1
-        p′
-        x′
     end
     @variables begin
-        p(t)=p′
-        x(t)=x′
+        p(t)
+        x(t)
         dm(t)=0
-        f(t)=p′ * A
+        f(t)
         dx(t)=0
+        dr(t)=0
         (r(t) = dr ~ 0), [guess = 1000]
-        dr(t)
     end
     @components begin
-        port = Port(p=p′)
-        flange = Flange(f=-p′ * A * direction)
+        port = Port()
+        flange = Flange()
     end
     @equations begin
         D(x) ~ dx
@@ -156,8 +74,8 @@ end
         
         p ~ +port.p
         dm ~ +port.dm # mass is entering
-        f ~ -flange.f * direction # force is leaving
-        dx ~ flange.dx * direction
+        flange.f * direction  ~ -f 
+        flange.dx * direction ~ dx 
 
         r ~ ρ₀*(1 + p/β)
         dm ~ (r*dx*A) + (dr*x*A)
@@ -168,44 +86,37 @@ end
 @mtkmodel Mass begin
     @parameters begin
         m = 100
-        f′
     end
     @variables begin
-        f(t)=f′
-        x(t)=0
         dx(t)=0
-        ẍ(t)=f′/m
+        f(t)
     end
     @components begin
-        flange = Flange(f=f′)
+        flange = Flange()
     end
     @equations begin
-        D(x) ~ dx
-        D(dx) ~ ẍ
-
-        f ~ flange.f
-        dx ~ flange.dx
-
-        m*ẍ ~ f
+        # connectors
+        flange.dx ~ dx
+        flange.f ~ -f
+        
+        # physics
+        f ~ m*D(dx)
     end
 end
 
 @mtkmodel Actuator begin
     @parameters begin
-        p₁′
-        p₂′
-    end
-    begin #constants
-        x′=0.5
-        A=0.1
+        x=0.5
     end
     @components begin
-        port₁ = Port(p=p₁′)
-        port₂ = Port(p=p₂′)
-        vol₁ = Volume(p′=p₁′, x′=x′,  direction=-1)
-        vol₂ = Volume(p′=p₂′, x′=x′,  direction=+1)
-        mass = Mass(f′=(p₂′ - p₁′)*A)
-        flange = Flange(f=0)
+        port₁ = Port()
+        port₂ = Port()
+        flange = Flange()
+
+        vol₁ = Volume(;x, direction=-1)
+        vol₂ = Volume(;x, direction=+1)
+        mass = Mass()
+        
     end
     @equations begin
         connect(port₁, vol₁.port)
@@ -216,36 +127,45 @@ end
 
 @mtkmodel Source begin
     @parameters begin
-        p′
+        p
     end
     @components begin
-        port = Port(p=p′)
+        port = Port()
     end    
     @equations begin
-        port.p ~ p′
+        port.p ~ p
     end
 end
 
 @mtkmodel Damper begin
     @parameters begin
-        c = 1000
+        d = 1
+    end
+    @variables begin
+        dx(t)
+        f(t)
     end
     @components begin
-        flange = Flange(f=0)
+        flange = Flange()
     end
     @equations begin
-        flange.f ~ c*flange.dx
+        # connectors
+        flange.dx ~ dx
+        flange.f ~ -f
+        
+        # physics
+        f ~ d*dx
     end
 end
 
 
 @mtkmodel System begin
     @components begin
-        res₁ = Orifice(p′=300e5)
-        res₂ = Orifice(p′=0)
-        act = Actuator(p₁′=300e5, p₂′=0)
-        src = Source(p′=300e5)
-        snk = Source(p′=0)
+        res₁ = Orifice()
+        res₂ = Orifice()
+        act = Actuator()
+        src = Source(p=300e5)
+        snk = Source(p=0)
         dmp = Damper()
     end
     @equations begin
@@ -257,13 +177,53 @@ end
     end
 end
 
-# @mtkbuild sys = System()
-# prob = ODEProblem(sys, [sys.act.vol₁.r], (0,0.1))
+@mtkbuild sys = System()
 
+initsys = initializesystem(sys)
+
+
+
+
+
+using Symbolics
+eq = full_equations(sys)[7]
+defs = ModelingToolkit.defaults(sys);
+defs[sys.res₁.dm]
+eq = substitute(eq, sys.res₁.dm => defs[sys.res₁.dm])
+defs[sys.act.vol₁.r]
+eq = simplify(substitute(eq, sys.act.vol₁.r => defs[sys.act.vol₁.r]))
+defs[sys.act.vol₁.p′]
+eq = substitute(eq, sys.act.vol₁.p′ => defs[sys.act.vol₁.p′])
+defs[sys.act.p₁′]
+eq = substitute(eq, sys.act.p₁′ => defs[sys.act.p₁′])
+defs[sys.src.p′]
+eq = substitute(eq, sys.src.p′ => defs[sys.src.p′])
+
+eq = full_equations(sys)[7].rhs;
+ModelingToolkit.fixpoint_sub(eq, defs)
+
+
+using SimpleEuler: BackwardEuler
+prob = ODEProblem(sys, [], (0,1e-12))
+
+prob.f
+
+sol = solve(prob, BackwardEuler(); dt=1e-12, adaptive=false)
+
+
+
+for (s,v) in zip(states(sys), sol.u[2])
+    println("$s => $v")
+end
+
+prob = ODEProblem(sys, [sys.act.vol₁.r => 1014.9], (0,0.1))
+solve(prob; abstol=1, reltol=1)
 
 @named odesys = System()
 sys = structural_simplify(odesys)
 sys_init = initializesystem(sys)
+
+
 
 
 #=
