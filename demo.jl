@@ -46,7 +46,7 @@ plot(velocity_limits, orifices; xlabel="velocity limit [m/s]", ylabel="orifice s
 D = Differential(t)
 
 pars = @parameters A=0.1 pₛ=300e5 pᵣ=0 ρ=1000 C₀=2.7 m=100 Aₒ=0.00094 c=1000
-vars = @variables x(t)=0 ẋ(t)=0 p₁(t)=300e5 p₂(t)=0e5 ẍ(t)=(p₂-p₁)*A
+vars = @variables x(t)=0 ẋ(t)=0 p₁(t)=300e5 p₂(t)=0e5 ẍ(t)=(p₂-p₁)*A/m
 
 # symbolic expressions
 u = ẋ * (A/Aₒ)
