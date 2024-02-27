@@ -275,9 +275,9 @@ sol_r = solve(prob′);
 
 
 # velocity comparison (incompressible vs. compressible)
-plot(sol_ie, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="ImplicitEuler")
-plot!(sol_r, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Rodas5P")
-plot!(sol_ic, idxs=[ẋ])
+plot(sol_ie, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Compressible (ImplicitEuler)")
+plot!(sol_r, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Compressible (Rodas5P)")
+plot!(sol_ic, idxs=[ẋ], label="Incompressible")
 
 
 # What's Next --> Using the ModelingToolkitStandardLibrary
