@@ -260,12 +260,23 @@ end
 @mtkbuild sys = System()
 prob = ODEProblem(sys, [], (0, 0.1), [])
 
-# https://docs.sciml.ai/DiffEqDocs/stable/solvers/dae_solve/#Initialization-Schemes
-sol = solve(prob, ImplicitEuler(nlsolve = NLNewton(check_div=false, always_new=true)))
-# sol′ = solve(prob, Rodas5P(), reltol=1e-8, abstol=1e-8, initializealg = ShampineCollocationInit())
+# Solving with ImplicitEuler ---------------------------------------------------------
+sol_ie = solve(prob, ImplicitEuler(nlsolve = NLNewton(check_div=false, always_new=true)))
+
+# Solving with Initialization Hack ---------------------------------------------------
+dt = 1e-7
+prob = ODEProblem(sys, [], (0, dt))
+sol = solve(prob, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=true, relax=4/10, max_iter=100)); dt, adaptive=false)
+
+# update u0 with the ImplicitEuler non-adaptive step
+prob′ = ODEProblem(sys, sol[2], (0, 0.1))
+sol_r = solve(prob′);
+
+
 
 # velocity comparison (incompressible vs. compressible)
-plot(sol, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]")
+plot(sol_ie, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="ImplicitEuler")
+plot!(sol_r, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Rodas5P")
 plot!(sol_ic, idxs=[ẋ])
 
 
