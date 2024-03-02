@@ -20,9 +20,9 @@ end
 function convert_to_modelica(sys::ODESystem, file="modelica.mo")
 
     defs = ModelingToolkit.defaults(sys)
-    guesses = ModelingToolkit.guesses(sys)
-    defs = merge(guesses, defs)
-    states = unknowns(sys)
+    # guesses = ModelingToolkit.guesses(sys)
+    # defs = merge(guesses, defs)
+    vars = states(sys)
     eqs = full_equations(sys)
     pars = parameters(sys)
 
@@ -32,7 +32,7 @@ function convert_to_modelica(sys::ODESystem, file="modelica.mo")
         push!(code, "\tparameter Real $(clean(par)) = $(ModelingToolkit.fixpoint_sub(par, defs));")
     end
 
-    for st in states
+    for st in vars
         push!(code, "\tReal $(clean(st))(start = $(ModelingToolkit.fixpoint_sub(st, defs)));")
     end
 

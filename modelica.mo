@@ -24,6 +24,6 @@ equation
 	der(rho_2) = drho_2;
 	0 = -dm_1 + (L + x)*drho_1 + dx*rho_1;
 	0 = dm_2 + (L - x)*drho_2 - dx*rho_2;
-	0 = -p_s + (beta*(-rho_0 + rho_1)) / rho_0 + C*rho_0*((dm_1 / (A_p*rho_0))^2);
-	0 = p_r + (-beta*(-rho_0 + rho_2)) / rho_0 + C*rho_0*((dm_2 / (A_p*rho_0))^2);
+	0 = -p_s + (beta*(-rho_0 + rho_1)) / rho_0 + (C*abs(dm_1 / (A_p*rho_0))*dm_1) / A_p;
+	0 = p_r + (-beta*(-rho_0 + rho_2)) / rho_0 + (C*abs(dm_2 / (A_p*rho_0))*dm_2) / A_p;
 end MTK;

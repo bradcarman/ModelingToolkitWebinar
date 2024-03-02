@@ -3,14 +3,15 @@ using ModelingToolkit
 using DifferentialEquations
 using DelimitedFiles
 using Plots
+using LinearAlgebra
 
 @parameters t
 D = Differential(t)
 
-function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5)
+function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5, beta = 2e9)
     pars = @parameters begin
         rho_0 = 1000
-        beta = 2e9
+        beta = beta
         A = 0.1
         m = 100
         L = 1
@@ -25,7 +26,7 @@ function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5)
         p_2(t) = p_r
         x(t)=0
         dx(t)=0
-        ddx(t)=A*(p_1 - p_2)
+        ddx(t)=A*(p_1 - p_2)/m
         rho_1(t)=rho_0*(1 + p_1/beta)
         rho_2(t)=rho_0*(1 + p_2/beta)
         drho_1(t)=0
@@ -60,16 +61,23 @@ end
 # Here I build a linear system (u_fun = identity), this solves fine
 # ---------------------------------------------------------------
 @mtkbuild sys1 = System(;C=270/2)
-prob1 = ODEProblem(sys1, [], (0, 0.01))
+prob1 = ODEProblem(sys1, [], (0, 0.01); jac=true)
 sol1 = solve(prob1) # Success
 
+#check singularity
+abs(det(prob1.f.jac(prob1.u0, prob1.p, 0.0))) > 0 # false
 
 # ---------------------------------------------------------------
 # Now I build a non-linear system (u_fun(x) = x^2), this can only 
 # be solved with a non-adaptive ImplicitEuler using special nlsolve
 # ---------------------------------------------------------------
-@mtkbuild sys2 = System(x->x^2)
-prob2 = ODEProblem(sys2, [], (0, 0.01))
+@mtkbuild sys2 = System(x->x*abs(x))
+prob2 = ODEProblem(sys2, [], (0, 0.01); jac=true)
+
+#check singularity
+abs(det(prob2.f.jac(prob2.u0, prob2.p, 0.0))) > 0 # false
+
+
 sol2 = solve(prob2) #Unstable
 sol2 = solve(prob2, FBDF()) # MaxIters
 sol2 = solve(prob2, Rodas4()) #Unstable
@@ -85,7 +93,12 @@ sol2 = solve(prob2, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=t
 dt = 1e-7
 prob2 = ODEProblem(sys2, [], (0, dt))
 u0sol = solve(prob2, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=true, relax=4/10,max_iter=100)); dt, adaptive=false, initializealg=NoInit())
-prob2 = ODEProblem(sys2, u0sol[2], (0, 0.01))
+prob2 = ODEProblem(sys2, u0sol[2], (0, 0.01); jac=true)
+
+#check singularity
+abs(det(prob2.f.jac(prob2.u0, prob2.p, 0.0))) > 0 # true
+
+
 sol2 = solve(prob2, Rodas5P()) # Unstable
 sol2 = solve(prob2, Rodas4()) # Success
 
@@ -128,3 +141,24 @@ plot!(sol2; idxs=sys2.drho_1)
 # [1] How to get a more robust solve from DifferentialEquations.jl when x^2?
 # [2] How do I use the new MTK initialization to initialize rho_1 and rho_2 without the need for writing `rho_0*(1 + p/beta)` twice (once when definining the variable, once in the equations)
 # ---------------------------------------------------------------
+
+
+
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+sol1[getfield.(equations(prob1.f.sys),:rhs)][1]
+
+
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+# ---------------------------------------------------------------
+@mtkbuild sys = System(x->x*abs(x); p_s = 100, p_r = 10,  beta = 20)
+prob = ODEProblem(sys, [], (0, 0.01))
+sol = solve(prob) # Success
+sol.alg #Rodas5P(; linsolve = nothing, precs = DEFAULT_PRECS,)
+sol = solve(prob, Rodas5P()) # Unstable <--- WHY???
+
+
+prob = ODEProblem(sys, [], (0, 0.01); jac=true)
+abs(det(prob.f.jac(prob.u0, prob.p, 0.0))) > 0 # false
