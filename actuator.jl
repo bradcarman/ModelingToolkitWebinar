@@ -93,7 +93,7 @@ sol2 = solve(prob2, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=t
 dt = 1e-7
 prob2 = ODEProblem(sys2, [], (0, dt))
 u0sol = solve(prob2, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=true, relax=4/10,max_iter=100)); dt, adaptive=false, initializealg=NoInit())
-prob2 = ODEProblem(sys2, u0sol[2], (0, 0.01); jac=true)
+prob2 = ODEProblem(sys2, u0sol[2], (0, 0.02); jac=true)
 
 #check singularity
 abs(det(prob2.f.jac(prob2.u0, prob2.p, 0.0))) > 0 # true
@@ -111,13 +111,13 @@ sol2 = solve(prob2, Rodas4()) # Success
 # include("convert_to_modelica.jl")
 # convert_to_modelica(sys2)
 
-# using OMJulia
-# omc = OMJulia.OMCSession()
-# simflags="-override=startTime=0,stopTime=0.01,tolerance=1e-6,solver=dassl,outputFormat=csv"
-# ModelicaSystem(omc, "modelica.mo", "MTK")
-# simulate(omc;  resultfile = "modelica.csv", simflags)
-# resultfile = joinpath(getWorkDirectory(omc), "modelica.csv")
-
+using OMJulia
+omc = OMJulia.OMCSession()
+simflags="-override=startTime=0,stopTime=0.02,tolerance=1e-6,solver=dassl,outputFormat=csv"
+ModelicaSystem(omc, "modelica.mo", "MTK")
+simulate(omc;  resultfile = "modelica.csv", simflags)
+resultfile = joinpath(getWorkDirectory(omc), "modelica.csv")
+cp(resultfile, "./modelica.csv"; force=true)
 resultfile = "modelica.csv"
 data, header = readdlm(resultfile, ','; header=true);
 i(var) = findfirst(vec(header) .== var)

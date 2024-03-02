@@ -9,10 +9,10 @@ model MTK
 	parameter Real C = 1.35;
 	parameter Real c = 1000;
 	parameter Real A_p = 0.00094;
-	Real x(start = 0);
-	Real dx(start = 0);
-	Real rho_1(start = 1004.9999999999999);
-	Real rho_2(start = 1000.5);
+	Real x(start = 0, fixed=true);
+	Real dx(start = 0, fixed=true);
+	Real rho_1(start = 1005, fixed=true);
+	Real rho_2(start = 1000.5, fixed=true);
 	Real drho_1(start = 0);
 	Real drho_2(start = 0);
 	Real dm_1(start = 0);
