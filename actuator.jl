@@ -147,6 +147,26 @@ plot!(sol2; idxs=sys2.drho_1)
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
 # ---------------------------------------------------------------
+# checking the modelica result
+u0(j) = [
+    data[j, i("x")]
+    data[j, i("dx")]
+    data[j, i("rho_1")]
+    data[j, i("rho_2")]
+    data[j, i("drho_1")]
+    data[j, i("drho_2")]
+    data[j, i("dm_1")]
+    data[j, i("dm_2")]
+]
+
+res(j) = norm(prob2.f.f.f_oop(u0(j), prob2.p, data[j,1])[5:end])
+
+j=3:size(data,1)
+plot(data[j,1], res.(j); ylabel="modelica residual norm", xlabel="time [s]")
+
+
+
+
 sol1[getfield.(equations(prob1.f.sys),:rhs)][1]
 
 
