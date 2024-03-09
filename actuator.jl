@@ -20,21 +20,19 @@ function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5, beta 
         C = C
         c = 1000
         A_p = 0.00094
-    end   
+    end
     vars = @variables begin
         p_1(t) = p_s
         p_2(t) = p_r
         x(t)=0
         dx(t)=0
         ddx(t)=A*(p_1 - p_2)/m
-        rho_1(t)=rho_0*(1 + p_1/beta)
-        rho_2(t)=rho_0*(1 + p_2/beta)
-        drho_1(t)=0
-        drho_2(t)=0
+        rho_1(t)
+        rho_2(t)
         dm_1(t)=0
         dm_2(t)=0
     end
-    
+
     # let -----
     u_1 = dm_1/(rho_0*A_p)
     u_2 = dm_2/(rho_0*A_p)
@@ -42,10 +40,8 @@ function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5, beta 
     eqs = [
         D(x) ~ dx
         D(dx) ~ ddx
-        D(rho_1) ~ drho_1
-        D(rho_2) ~ drho_2
-        +dm_1 ~ drho_1*(L+x) + rho_1*dx
-        -dm_2 ~ drho_2*(L-x) - rho_2*dx
+        +dm_1 ~ rho_1*dx
+        -dm_2 ~ - rho_2*dx
         rho_1 ~ rho_0*(1 + p_1/beta)
         rho_2 ~ rho_0*(1 + p_2/beta)
         m*ddx ~ (p_1 - p_2)*A - c*dx
