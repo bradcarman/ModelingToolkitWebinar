@@ -1,12 +1,10 @@
 using ModelingToolkit
-#using ModelingToolkit: t_nounits as t, D_nounits as D
+using ModelingToolkit: t_nounits as t, D_nounits as D
 using DifferentialEquations
 using DelimitedFiles
 using Plots
 using LinearAlgebra
 
-@parameters t
-D = Differential(t)
 
 function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5, beta = 2e9)
     pars = @parameters begin
@@ -26,13 +24,13 @@ function System(u_fun=identity;name, p_s = 100e5, p_r = 10e5, C = 2.7*0.5, beta 
         p_2(t) = p_r
         x(t)=0
         dx(t)=0
-        ddx(t)=A*(p_1 - p_2)/m
-        rho_1(t)=rho_0*(1 + p_1/beta)
-        rho_2(t)=rho_0*(1 + p_2/beta)
-        drho_1(t)=0
-        drho_2(t)=0
-        dm_1(t)=0
-        dm_2(t)=0
+        ddx(t), [guess=0]
+        rho_1(t), [guess=rho_0]
+        rho_2(t), [guess=rho_0]
+        drho_1(t), [guess=0]
+        drho_2(t), [guess=0]
+        dm_1(t), [guess=0]
+        dm_2(t), [guess=0]
     end
     
     # let -----
@@ -63,6 +61,9 @@ end
 @mtkbuild sys1 = System(;C=270/2)
 prob1 = ODEProblem(sys1, [], (0, 0.01); jac=true)
 sol1 = solve(prob1) # Success
+
+sol1[sys1.rho_1][1] #1005.0 correct initialization
+sol1[sys1.rho_2][1] #1000.0 correct initialization
 
 #check singularity
 abs(det(prob1.f.jac(prob1.u0, prob1.p, 0.0))) > 0 # false
