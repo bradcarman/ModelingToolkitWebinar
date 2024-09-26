@@ -84,17 +84,19 @@ sol_ic = solve(prob′)
 # ------------------------------------------------
 # Part 3: Component Based Modeling ---------------
 # ------------------------------------------------
+regPow(x, a, delta = 0.01) = x * (x * x + delta * delta)^((a - 1) / 2);
+regRoot(x, delta = 0.01) = regPow(x, 0.5, delta)
 
 # Connectors ----
 # https://docs.sciml.ai/ModelingToolkitStandardLibrary/stable/connectors/connections/
 @connector Port begin
-    p(t)
-    ṁ(t)=0, [connect = Flow]
+    p(t), [guess=0]
+    ṁ(t), [guess=0, connect = Flow]
 end
 
 @connector Flange begin
-    ẋ(t)=0
-    f(t), [connect = Flow]
+    x(t), [guess=0]
+    f(t), [guess=0, connect = Flow]
 end
 
 
@@ -104,16 +106,15 @@ end
         Cₒ=2.7
         Aₒ=0.00094
         ρ₀=1000
-        p′=0
     end
     @variables begin
-        ṁ(t)=0
-        p₁(t)=p′
-        p₂(t)=p′
+        ṁ(t), [guess=0]
+        p₁(t), [guess=1]
+        p₂(t), [guess=1]
     end
     @components begin
-        port₁ = Port(p=p′)
-        port₂ = Port(p=p′)
+        port₁ = Port()
+        port₂ = Port()
     end
     begin
         u = ṁ/(ρ₀*Aₒ)
@@ -124,7 +125,10 @@ end
         p₁ ~ port₁.p
         p₂ ~ port₂.p
         
-        p₁ - p₂ ~ (1/2)*ρ₀*u^2*Cₒ
+        # p₁ - p₂ ~ (1/2)*ρ₀*u^2*Cₒ
+
+        u ~ regRoot( 2*(p₁ - p₂)/(ρ₀*Cₒ) )
+
     end
 end
 
@@ -134,33 +138,34 @@ end
         ρ₀=1000
         β=2e9
         direction=+1
-        p′
-        x′
+        L=0.5
     end
     @variables begin
-        p(t)=p′
-        x(t)=x′
-        ṁ(t)=0
-        f(t)=p′ * A
-        ẋ(t)=0
-        r(t)=ρ₀*(1 + p′/β)
-        ṙ(t)=0
+        p(t), [guess=1]
+        x(t), [guess=0]
+        m(t), [guess=1]
+        ṁ(t), [guess=0]
+        f(t), [guess=1]
+        ẋ(t), [guess=0]
+        r(t), [guess=1]
+        ṙ(t), [guess=0]
     end
     @components begin
-        port = Port(p=p′)
-        flange = Flange(f=-p′ * A * direction)
+        port = Port()
+        flange = Flange()
     end
     @equations begin
         D(x) ~ ẋ
         D(r) ~ ṙ
+        D(m) ~ ṁ
         
         p ~ +port.p
         ṁ ~ +port.ṁ # mass is entering
         f ~ -flange.f * direction # force is leaving
-        ẋ ~ flange.ẋ * direction
+        ẋ ~ +D(flange.x) * direction
 
         r ~ ρ₀*(1 + p/β)
-        ṁ ~ (r*ẋ*A) + (ṙ*x*A)
+        m ~ r*(x+L)*A
         f ~ p * A
     end
 end
@@ -168,23 +173,22 @@ end
 @mtkmodel Mass begin
     @parameters begin
         m = 100
-        f′
     end
     @variables begin
-        f(t)=f′
-        x(t)=0
-        ẋ(t)=0
-        ẍ(t)=f′/m
+        f(t), [guess=1]
+        x(t), [guess=0]
+        ẋ(t), [guess=0]
+        ẍ(t), [guess=0]
     end
     @components begin
-        flange = Flange(f=f′)
+        flange = Flange()
     end
     @equations begin
         D(x) ~ ẋ
         D(ẋ) ~ ẍ
 
         f ~ flange.f
-        ẋ ~ flange.ẋ
+        x ~ flange.x
 
         m*ẍ ~ f
     end
@@ -192,37 +196,37 @@ end
 
 @mtkmodel Actuator begin
     @parameters begin
-        p₁′
-        p₂′
-    end
-    begin #constants
-        x′=0.5
         A=0.1
     end
+    @variables begin
+        x(t), [guess=0]
+    end
     @components begin
-        port₁ = Port(p=p₁′)
-        port₂ = Port(p=p₂′)
-        vol₁ = Volume(p′=p₁′, x′=x′,  direction=-1)
-        vol₂ = Volume(p′=p₂′, x′=x′,  direction=+1)
-        mass = Mass(f′=(p₂′ - p₁′)*A)
-        flange = Flange(f=0)
+        port₁ = Port()
+        port₂ = Port()
+        vol₁ = Volume(;A,  direction=-1)
+        vol₂ = Volume(;A,  direction=+1)
+        mass = Mass()
+        flange = Flange()
     end
     @equations begin
         connect(port₁, vol₁.port)
         connect(port₂, vol₂.port)
         connect(vol₁.flange, vol₂.flange, mass.flange, flange)
+
+        x ~ mass.x
     end
 end
 
 @mtkmodel Source begin
     @parameters begin
-        p′
+        p
     end
     @components begin
-        port = Port(p=p′)
+        port = Port()
     end    
     @equations begin
-        port.p ~ p′
+        port.p ~ p
     end
 end
 
@@ -231,21 +235,21 @@ end
         c = 1000
     end
     @components begin
-        flange = Flange(f=0)
+        flange = Flange()
     end
     @equations begin
-        flange.f ~ c*flange.ẋ
+        flange.f ~ c*D(flange.x)
     end
 end
 
 
 @mtkmodel System begin
     @components begin
-        res₁ = Orifice(p′=300e5)
-        res₂ = Orifice(p′=0)
-        act = Actuator(p₁′=300e5, p₂′=0)
-        src = Source(p′=300e5)
-        snk = Source(p′=0)
+        res₁ = Orifice()
+        res₂ = Orifice()
+        act = Actuator()
+        src = Source(p=300e5)
+        snk = Source(p=0)
         dmp = Damper()
     end
     @equations begin
@@ -258,25 +262,51 @@ end
 end
 
 @mtkbuild sys = System()
-prob = ODEProblem(sys, [], (0, 0.1), [])
 
-# Solving with ImplicitEuler ---------------------------------------------------------
-sol_ie = solve(prob, ImplicitEuler(nlsolve = NLNewton(check_div=false, always_new=true)))
+ρ₀=1000
+β=2e9
+p1=300e5
+p2=0
+u0 = unknowns(sys) .=> [
+    0
+    0
+    0.5*0.1*ρ₀*(1 + p1/β)
+    0
+    0.5*0.1*ρ₀*(1 + p2/β)
+    0
+    0
+    0
+    ρ₀*(1 + p1/β)
+    ρ₀*(1 + p2/β)
+]
 
-# Solving with Initialization Hack ---------------------------------------------------
-dt = 1e-7
-prob = ODEProblem(sys, [], (0, dt))
-sol = solve(prob, ImplicitEuler(nlsolve=NLNewton(check_div=false, always_new=true, relax=4/10, max_iter=100)); dt, adaptive=false)
+include("convert_to_modelica.jl")
+convert_to_modelica(sys, Dict(u0))
 
-# update u0 with the ImplicitEuler non-adaptive step
-prob′ = ODEProblem(sys, sol[2], (0, 0.1))
-sol_r = solve(prob′);
 
+
+initialization_eqs = [
+    sys.act.x ~ 0
+    D(sys.act.x) ~ 0
+    
+    sys.act.vol₁.x ~ 0
+    D(sys.act.vol₁.m) ~ 0
+    
+    sys.act.vol₂.x ~ 0
+    D(sys.act.vol₂.m) ~ 0
+]
+
+
+
+initsys = ModelingToolkit.generate_initializesystem(sys; initialization_eqs)
+structural_simplify(initsys)
+
+prob = ODEProblem(sys, u0, (0, 0.1), []; initialization_eqs)
+sol = solve(prob)
 
 
 # velocity comparison (incompressible vs. compressible)
-plot(sol_ie, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Compressible (ImplicitEuler)")
-plot!(sol_r, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Compressible (Rodas5P)")
+plot(sol, idxs=[sys.act.mass.ẋ]; ylabel="velocity [m/s]", label="Compressible")
 plot!(sol_ic, idxs=[ẋ], label="Incompressible")
 
 

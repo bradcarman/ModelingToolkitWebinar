@@ -12,17 +12,18 @@ function clean(eq)
     eqs = replace(eqs, "ṁ"=>"dm")
     eqs = replace(eqs, "ₒ"=>"_0")
     eqs = replace(eqs, "₀"=>"_0")
+    eqs = replace(eqs, "μ"=>"mu")
     
     
     return eqs
 end
 
-function convert_to_modelica(sys::ODESystem, file="modelica.mo")
+function convert_to_modelica(sys::ODESystem, u0::Dict, file="modelica.mo")
 
     defs = ModelingToolkit.defaults(sys)
     # guesses = ModelingToolkit.guesses(sys)
-    # defs = merge(guesses, defs)
-    vars = states(sys)
+    defs = merge(u0, defs)
+    vars = unknowns(sys)
     eqs = full_equations(sys)
     pars = parameters(sys)
 
